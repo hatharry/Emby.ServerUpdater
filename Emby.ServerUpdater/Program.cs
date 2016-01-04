@@ -27,17 +27,13 @@ namespace Emby.ServerUpdater
                 dynamic packages = JsonConvert.DeserializeObject(json);
                 foreach (dynamic package in packages[0].versions)
                 {
-
                     Version version = new Version(package.versionStr.ToString());
-
                     if (package.classification == GetUpdateLevel() && version >= highversion)
                     {
                         highversion = version;
                         targetFilename = package.targetFilename;
                         sourceUrl = package.sourceUrl;
                     }
-
-
                 }
                 return Tuple.Create(highversion, sourceUrl, targetFilename);
             }
@@ -45,8 +41,7 @@ namespace Emby.ServerUpdater
             {
                 return null;
             }
-            }
-        
+        }
         public static string GetServerProgramDataPath()
         {
             if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
@@ -58,8 +53,6 @@ namespace Emby.ServerUpdater
                 return Path.GetDirectoryName(Path.GetDirectoryName(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\MediaBrowser", "ImagePath", null)).Replace("\"", "").Split(null).First()));
             }
             return null;
-
-
         }
         public static Version GetServerVersion()
         {
@@ -74,8 +67,6 @@ namespace Emby.ServerUpdater
                 return serverver;
             }
             return null;
-
-
         }
         public static string GetUpdateLevel()
         {
@@ -93,7 +84,6 @@ namespace Emby.ServerUpdater
         }
         public static void DownloadPackage()
         {
-            
             try
             {
                 Console.WriteLine("Downloading Package");
@@ -106,53 +96,39 @@ namespace Emby.ServerUpdater
             {
                 Console.WriteLine("Download Failed");
             }
-            
         }
-
         public static void StopService()
         {
-
             string[] ServiceNames = { "MediaBrowser", "Emby" };
             foreach (string ServiceName in ServiceNames)
             {
                 ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
                 if (service != null && service.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
                 {
-                    
-                    
                     Console.WriteLine("Stopping Service");
                     service.Stop();
                     service.WaitForStatus(ServiceControllerStatus.Stopped);
-                    
-
-
                 }
             }
         }
         public static void StartService()
         {
-            
             string[] ServiceNames = { "MediaBrowser", "Emby" };
             foreach (string ServiceName in ServiceNames)
             {
                 ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
                 if (service != null && service.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
                 {
-                    
                     Console.WriteLine("Starting Service");
                     try
                     {
                         service.Start();
                         service.WaitForStatus(ServiceControllerStatus.Running);
-
                     }
                     catch
                     {
                         service.WaitForStatus(ServiceControllerStatus.Running);
-                        
                     }
-                    
-
                 }
             }
         }
@@ -166,14 +142,12 @@ namespace Emby.ServerUpdater
                     Directory.CreateDirectory(GetServerProgramDataPath() + "\\Updater\\");
                     File.Copy(Directory.GetCurrentDirectory() + "\\Emby.ServerUpdater.exe", GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
                     File.Copy(Directory.GetCurrentDirectory() + "\\Newtonsoft.Json.dll", GetServerProgramDataPath() + "\\Updater" + "\\Newtonsoft.Json.dll", true);
-                
-            }
+                }
                 Process cmd = new Process();
                 cmd.StartInfo.FileName = "c:\\windows\\system32\\schtasks.exe";
                 cmd.StartInfo.Arguments = "/create /sc DAILY /TN \"Emby Service Updater\" /RU SYSTEM /TR " + GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe" + " /ST 04:00 /F";
                 cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                cmd.Start();
-                
+                cmd.Start();  
             }
         }
         public static void ServiceToAuto()
@@ -190,14 +164,11 @@ namespace Emby.ServerUpdater
                     cmd.StartInfo.Arguments = "config " + ServiceName + " start=auto";
                     cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                     cmd.Start();
-
                 }
             }
         }
 static void Main(string[] args)
-        {
-           
-                
+        { 
             if (args.Contains("-download") && GetVersion() != null && GetServerVersion() < GetVersion().Item1)
             {
                 DownloadPackage();
@@ -218,11 +189,6 @@ static void Main(string[] args)
                 StopService();
                 StartService();
             }
-                
-            
-
-
         }
     }
-
 }
