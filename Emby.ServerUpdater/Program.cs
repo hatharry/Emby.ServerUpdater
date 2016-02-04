@@ -148,7 +148,6 @@ namespace Emby.ServerUpdater
         }
         public static void CreateTask()
         {
-            Console.WriteLine(GetServerProgramDataPath());
             if (Directory.Exists(GetServerProgramDataPath()))
             {
                 Console.WriteLine("Creating Task");
