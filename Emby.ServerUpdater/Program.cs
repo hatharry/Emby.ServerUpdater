@@ -18,21 +18,27 @@ namespace Emby.ServerUpdater
         static public Tuple<Version, string, string> GetVersion()
         {
             try {
-                string PackageName = "MBserver";
                 Version highversion = GetServerVersion();
-                string targetFilename = null;
+                string targetFilename = "Mbserver.zip";
+                string sourceFilename = "emby.windows.zip";
                 string sourceUrl = null;
                 WebClient Client = new WebClient();
-                var json = Client.DownloadString("http://www.mb3admin.com/admin/service/package/retrieveAll?name=" + PackageName);
+                Client.Headers.Add("user-agent", "Emby / 3.0");
+                var json = Client.DownloadString("https://api.github.com/repos/mediabrowser/emby/releases");
                 dynamic packages = JsonConvert.DeserializeObject(json);
-                foreach (dynamic package in packages[0].versions)
+                foreach (dynamic package in packages)
                 {
-                    Version version = new Version(package.versionStr.ToString());
-                    if (package.classification == GetUpdateLevel() && version >= highversion)
+                    Version version = new Version(package.tag_name.ToString());
+                    if (package.target_commitish == GetUpdateLevel() && version >= highversion)
                     {
-                        highversion = version;
-                        targetFilename = package.targetFilename;
-                        sourceUrl = package.sourceUrl;
+                        foreach (dynamic asset in package.assets)
+                        {
+                            if (asset.name == sourceFilename)
+                            {
+                                sourceUrl = asset.browser_download_url;
+                                highversion = version;
+                            }
+                        }   
                     }
                 }
                 return Tuple.Create(highversion, sourceUrl, targetFilename);
@@ -75,7 +81,14 @@ namespace Emby.ServerUpdater
                 XmlDocument xmlDoc = new XmlDocument();
                 xmlDoc.Load(GetServerProgramDataPath() + "\\config\\System.xml");
                 XmlNodeList XML = xmlDoc.GetElementsByTagName("SystemUpdateLevel");
-                return XML[0].InnerText;
+                if (XML[0].InnerText != "Release")
+                {
+                    return XML[0].InnerText.ToLower();
+                }
+                else
+                {
+                    return "master";
+                }
             }
             catch
             {
@@ -89,6 +102,7 @@ namespace Emby.ServerUpdater
                 Console.WriteLine("Downloading Package");
                 Directory.CreateDirectory(GetServerProgramDataPath() + "\\Updates\\");
                 WebClient Client = new WebClient();
+                Client.Headers.Add("user-agent", "Emby / 3.0");
                 Client.DownloadFile(GetVersion().Item2, GetServerProgramDataPath() + "\\Updates\\" + GetVersion().Item3);
                 File.WriteAllText(GetServerProgramDataPath() + "\\Updates\\" + GetVersion().Item3 + ".ver", GetVersion().Item1.ToString());
             }
