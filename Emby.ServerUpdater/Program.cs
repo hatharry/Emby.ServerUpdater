@@ -148,15 +148,16 @@ namespace Emby.ServerUpdater
         }
         public static void CreateTask()
         {
+            Console.WriteLine(GetServerProgramDataPath());
             if (Directory.Exists(GetServerProgramDataPath()))
             {
                 Console.WriteLine("Creating Task");
                 if (Directory.GetCurrentDirectory() != GetServerProgramDataPath() + "\\Updater")
                 {
                     Directory.CreateDirectory(GetServerProgramDataPath() + "\\Updater\\");
-                    File.Copy(Directory.GetCurrentDirectory() + "\\Emby.ServerUpdater.exe", GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
-                    File.Copy(Directory.GetCurrentDirectory() + "\\Newtonsoft.Json.dll", GetServerProgramDataPath() + "\\Updater" + "\\Newtonsoft.Json.dll", true);
                 }
+                File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Emby.ServerUpdater.exe", GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
+                File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Newtonsoft.Json.dll", GetServerProgramDataPath() + "\\Updater" + "\\Newtonsoft.Json.dll", true);
                 Process cmd = new Process();
                 cmd.StartInfo.FileName = "c:\\windows\\system32\\schtasks.exe";
                 cmd.StartInfo.Arguments = "/create /sc DAILY /TN \"Emby Service Updater\" /RU SYSTEM /TR " + GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe" + " /ST 04:00 /F";
@@ -182,7 +183,7 @@ namespace Emby.ServerUpdater
             }
         }
 static void Main(string[] args)
-        { 
+        {
             if (args.Contains("-download") && GetVersion() != null && GetServerVersion() < GetVersion().Item1)
             {
                 DownloadPackage();
