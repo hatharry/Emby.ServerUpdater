@@ -54,10 +54,6 @@ namespace Emby.ServerUpdater
             {
                 return Path.GetDirectoryName(Path.GetDirectoryName(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null)).Replace("\"", "").Split(null).First()));
             }
-            else if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\MediaBrowser", "ImagePath", null) != null)
-            {
-                return Path.GetDirectoryName(Path.GetDirectoryName(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\MediaBrowser", "ImagePath", null)).Replace("\"", "").Split(null).First()));
-            }
             return null;
         }
         public static Version GetServerVersion()
@@ -65,11 +61,6 @@ namespace Emby.ServerUpdater
             if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
             {
                 Version serverver = new Version(FileVersionInfo.GetVersionInfo(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null)).Replace("\"", "").Split(null).First()).ProductVersion);
-                return serverver;
-            }
-            else if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\MediaBrowser", "ImagePath", null) != null)
-            {
-                Version serverver = new Version(FileVersionInfo.GetVersionInfo(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\MediaBrowser", "ImagePath", null)).Replace("\"", "").Split(null).First()).ProductVersion);
                 return serverver;
             }
             return null;
@@ -113,37 +104,26 @@ namespace Emby.ServerUpdater
         }
         public static void StopService()
         {
-            string[] ServiceNames = { "MediaBrowser", "Emby" };
-            foreach (string ServiceName in ServiceNames)
+            string ServiceName = "Emby";
+            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
+            if (service != null && service.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
-                ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-                if (service != null && service.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
+                Console.WriteLine("Stopping Service");
+                service.Stop();
+                while (Process.GetProcessesByName("MediaBrowser.ServerApplication").Length != 0)
                 {
-                    Console.WriteLine("Stopping Service");
-                    service.Stop();
-                    service.WaitForStatus(ServiceControllerStatus.Stopped);
-                }
+                    Console.WriteLine("Waiting for process to close");
+                } 
             }
         }
         public static void StartService()
         {
-            string[] ServiceNames = { "MediaBrowser", "Emby" };
-            foreach (string ServiceName in ServiceNames)
+            string ServiceName = "Emby";
+            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
+            if (service != null && service.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
-                ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-                if (service != null && service.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
-                {
-                    Console.WriteLine("Starting Service");
-                    try
-                    {
-                        service.Start();
-                        service.WaitForStatus(ServiceControllerStatus.Running);
-                    }
-                    catch
-                    {
-                        service.WaitForStatus(ServiceControllerStatus.Running);
-                    }
-                }
+                Console.WriteLine("Starting Service");
+                service.Start();
             }
         }
         public static void CreateTask()
@@ -166,19 +146,16 @@ namespace Emby.ServerUpdater
         }
         public static void ServiceToAuto()
         {
-            string[] ServiceNames = { "MediaBrowser", "Emby" };
-            foreach (string ServiceName in ServiceNames)
+            string ServiceName = "Emby";
+            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
+            if (service != null)
             {
-                ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-                if (service != null)
-                {
-                    Console.WriteLine(ServiceName + " Auto Startup");
-                    Process cmd = new Process();
-                    cmd.StartInfo.FileName = "c:\\windows\\system32\\sc.exe";
-                    cmd.StartInfo.Arguments = "config " + ServiceName + " start=auto";
-                    cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                    cmd.Start();
-                }
+                Console.WriteLine(ServiceName + " Auto Startup");
+                Process cmd = new Process();
+                cmd.StartInfo.FileName = "c:\\windows\\system32\\sc.exe";
+                cmd.StartInfo.Arguments = "config " + ServiceName + " start=auto";
+                cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                cmd.Start();
             }
         }
 static void Main(string[] args)
