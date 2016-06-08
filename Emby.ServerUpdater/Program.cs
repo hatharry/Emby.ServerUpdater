@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using System.IO;
 using Microsoft.Win32;
@@ -15,170 +12,169 @@ namespace Emby.ServerUpdater
 {
     class Program
     {
-        static public Tuple<Version, string, string> GetVersion()
+        private Version localVersion;
+        private Version highestVersion = new Version();
+        private string sourceUrl;
+        private string targetFilename = "Mbserver.zip";
+        private string sourceFilename = "emby.windows.zip";
+        private string programDataPath;
+        private string updateLevel;
+        private ServiceController embyService = new ServiceController("Emby");
+
+        public Program() {
+            getServerProgramDataPath();
+            getServerVersion();
+            getUpdateLevel();
+            getRemoteVersion();
+
+        }
+        private void getRemoteVersion()
         {
-            try {
-                Version highversion = GetServerVersion();
-                string targetFilename = "Mbserver.zip";
-                string sourceFilename = "emby.windows.zip";
-                string sourceUrl = null;
-                WebClient Client = new WebClient();
-                Client.Headers.Add("user-agent", "Emby / 3.0");
-                var json = Client.DownloadString("https://api.github.com/repos/mediabrowser/emby/releases");
-                dynamic packages = JsonConvert.DeserializeObject(json);
-                foreach (dynamic package in packages)
+            WebClient wClient = new WebClient();
+            wClient.Headers.Add("user-agent", "Emby / 3.0");
+            string json = wClient.DownloadString("https://api.github.com/repos/mediabrowser/emby/releases");
+            dynamic packages = JsonConvert.DeserializeObject(json);
+            foreach (dynamic package in packages)
+            {
+                Version version = new Version(package.tag_name.ToString());
+                if (package.target_commitish == updateLevel && version >= highestVersion)
                 {
-                    Version version = new Version(package.tag_name.ToString());
-                    if (package.target_commitish == GetUpdateLevel() && version >= highversion)
+                    foreach (dynamic asset in package.assets)
                     {
-                        foreach (dynamic asset in package.assets)
+                        if (asset.name == sourceFilename)
                         {
-                            if (asset.name == sourceFilename)
-                            {
-                                sourceUrl = asset.browser_download_url;
-                                highversion = version;
-                            }
-                        }   
-                    }
+                            sourceUrl = asset.browser_download_url;
+                            highestVersion = version;
+                        }
+                    }   
                 }
-                return Tuple.Create(highversion, sourceUrl, targetFilename);
-            }
-            catch
-            {
-                return null;
             }
         }
-        public static string GetServerProgramDataPath()
+        private void getServerProgramDataPath()
         {
             if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
             {
-                return Path.GetDirectoryName(Path.GetDirectoryName(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null)).Replace("\"", "").Split(null).First()));
+                programDataPath = Path.GetDirectoryName(Path.GetDirectoryName((Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null).ToString()).Replace("\"", "").Split(null).First()));
             }
-            return null;
         }
-        public static Version GetServerVersion()
+        private void getServerVersion()
         {
-            if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
+            if (Directory.Exists(programDataPath))
             {
-                Version serverver = new Version(FileVersionInfo.GetVersionInfo(((string)Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null)).Replace("\"", "").Split(null).First()).ProductVersion);
-                return serverver;
+                localVersion = new Version(FileVersionInfo.GetVersionInfo(programDataPath + "\\system\\MediaBrowser.ServerApplication.exe").ProductVersion);
             }
-            return null;
         }
-        public static string GetUpdateLevel()
+        private void getUpdateLevel()
         {
-            try
-            {
                 XmlDocument xmlDoc = new XmlDocument();
-                xmlDoc.Load(GetServerProgramDataPath() + "\\config\\System.xml");
+                xmlDoc.Load(programDataPath + "\\config\\System.xml");
                 XmlNodeList XML = xmlDoc.GetElementsByTagName("SystemUpdateLevel");
                 if (XML[0].InnerText != "Release")
                 {
-                    return XML[0].InnerText.ToLower();
+                    updateLevel = XML[0].InnerText.ToLower();
                 }
                 else
                 {
-                    return "master";
+                    updateLevel = "master";
+                }
+        }
+        public bool downloadPackage()
+        {
+            if (localVersion < highestVersion)
+            {
+                try
+                {
+                    Console.WriteLine("Downloading Package");
+                    Directory.CreateDirectory(programDataPath + "\\Updates\\");
+                    WebClient wClient = new WebClient();
+                    wClient.Headers.Add("user-agent", "Emby / 3.0");
+                    wClient.DownloadFile(sourceUrl, programDataPath + "\\Updates\\" + targetFilename);
+                    File.WriteAllText(programDataPath + "\\Updates\\" + targetFilename + ".ver", highestVersion.ToString());
+                    return true;
+                }
+                catch
+                {
+                    Directory.Delete(programDataPath + "\\Updates\\", true);
+                    return false;
                 }
             }
-            catch
-            {
-                return null;
-            }
+            return false;
         }
-        public static void DownloadPackage()
+        public void stopService()
         {
-            try
-            {
-                Console.WriteLine("Downloading Package");
-                Directory.CreateDirectory(GetServerProgramDataPath() + "\\Updates\\");
-                WebClient Client = new WebClient();
-                Client.Headers.Add("user-agent", "Emby / 3.0");
-                Client.DownloadFile(GetVersion().Item2, GetServerProgramDataPath() + "\\Updates\\" + GetVersion().Item3);
-                File.WriteAllText(GetServerProgramDataPath() + "\\Updates\\" + GetVersion().Item3 + ".ver", GetVersion().Item1.ToString());
-            }
-            catch
-            {
-                Console.WriteLine("Download Failed");
-            }
-        }
-        public static void StopService()
-        {
-            string ServiceName = "Emby";
-            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-            if (service != null && service.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
+            if (embyService != null && embyService.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
                 Console.WriteLine("Stopping Service");
-                service.Stop();
+                embyService.Stop();
                 while (Process.GetProcessesByName("MediaBrowser.ServerApplication").Length != 0)
                 {
                     Console.WriteLine("Waiting for process to close");
+                    continue;
                 } 
             }
         }
-        public static void StartService()
+        public void startService()
         {
-            string ServiceName = "Emby";
-            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-            if (service != null && service.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
+            if (embyService != null && embyService.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
                 Console.WriteLine("Starting Service");
-                service.Start();
+                embyService.Start();
             }
         }
-        public static void CreateTask()
+        public void restartService() {
+            stopService();
+            startService();
+        }
+
+        public void createTask()
         {
-            if (Directory.Exists(GetServerProgramDataPath()))
+            if (Directory.Exists(programDataPath))
             {
                 Console.WriteLine("Creating Task");
-                if (AppDomain.CurrentDomain.BaseDirectory != GetServerProgramDataPath() + "\\Updater")
+                if (AppDomain.CurrentDomain.BaseDirectory != programDataPath + "\\Updater")
                 {
-                    Directory.CreateDirectory(GetServerProgramDataPath() + "\\Updater\\");
-                    File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Emby.ServerUpdater.exe", GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
-                    File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Newtonsoft.Json.dll", GetServerProgramDataPath() + "\\Updater" + "\\Newtonsoft.Json.dll", true);
+                    Directory.CreateDirectory(programDataPath + "\\Updater\\");
+                    File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Emby.ServerUpdater.exe", programDataPath + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
+                    File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Newtonsoft.Json.dll", programDataPath + "\\Updater" + "\\Newtonsoft.Json.dll", true);
                 }
                 Process cmd = new Process();
                 cmd.StartInfo.FileName = "c:\\windows\\system32\\schtasks.exe";
-                cmd.StartInfo.Arguments = "/create /sc DAILY /TN \"Emby Service Updater\" /RU SYSTEM /TR " + GetServerProgramDataPath() + "\\Updater" + "\\Emby.ServerUpdater.exe" + " /ST 04:00 /F";
+                cmd.StartInfo.Arguments = "/create /sc DAILY /TN \"Emby Service Updater\" /RU SYSTEM /TR " + programDataPath + "\\Updater" + "\\Emby.ServerUpdater.exe" + " /ST 04:00 /F";
                 cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                 cmd.Start();  
             }
         }
-        public static void ServiceToAuto()
+        public void serviceToAuto()
         {
-            string ServiceName = "Emby";
-            ServiceController service = ServiceController.GetServices().FirstOrDefault(s => s.ServiceName == ServiceName);
-            if (service != null)
+            if (embyService != null)
             {
-                Console.WriteLine(ServiceName + " Auto Startup");
+                Console.WriteLine("Emby Auto Startup");
                 Process cmd = new Process();
                 cmd.StartInfo.FileName = "c:\\windows\\system32\\sc.exe";
-                cmd.StartInfo.Arguments = "config " + ServiceName + " start=auto";
+                cmd.StartInfo.Arguments = "config Emby start=auto";
                 cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                 cmd.Start();
             }
         }
-static void Main(string[] args)
+        static void Main(string[] args)
         {
-            if (args.Contains("-download") && GetVersion() != null && GetServerVersion() < GetVersion().Item1)
+            Program program = new Program();
+            if (args.Contains("-download"))
             {
-                DownloadPackage();
+                program.downloadPackage();
             }
-            else if (args.Contains("-restart") && GetServerVersion() != null)
+            if (args.Contains("-restart"))
             {
-                StopService();
-                StartService();
+                program.restartService();
             }
             if (args.Contains("-createtask"))
             {
-                CreateTask();
-                ServiceToAuto();
+                program.createTask();
+                program.serviceToAuto();
             }
-            else if(GetServerVersion() != null && GetVersion() != null && GetServerVersion() < GetVersion().Item1)
+            if(args.Length == 0 && program.downloadPackage())
             {
-                DownloadPackage();
-                StopService();
-                StartService();
+                program.restartService();
             }
         }
     }
