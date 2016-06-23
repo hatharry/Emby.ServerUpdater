@@ -19,7 +19,10 @@ namespace Emby.ServerUpdater
         private string sourceFilename = "emby.windows.zip";
         private string programDataPath;
         private string updateLevel;
-        private ServiceController embyService = new ServiceController("Emby");
+        private ServiceController embyService;
+        private string embyServiceName = "Emby";
+        private Process cmd;
+        private WebClient wClient;
 
         public Program() {
             getServerProgramDataPath();
@@ -28,9 +31,10 @@ namespace Emby.ServerUpdater
             getRemoteVersion();
 
         }
+
         private void getRemoteVersion()
         {
-            WebClient wClient = new WebClient();
+            wClient = new WebClient();
             wClient.Headers.Add("user-agent", "Emby / 3.0");
             string json = wClient.DownloadString("https://api.github.com/repos/mediabrowser/emby/releases");
             dynamic packages = JsonConvert.DeserializeObject(json);
@@ -50,6 +54,7 @@ namespace Emby.ServerUpdater
                 }
             }
         }
+
         private void getServerProgramDataPath()
         {
             if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
@@ -57,6 +62,7 @@ namespace Emby.ServerUpdater
                 programDataPath = Path.GetDirectoryName(Path.GetDirectoryName((Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null).ToString()).Replace("\"", "").Split(null).First()));
             }
         }
+
         private void getServerVersion()
         {
             if (Directory.Exists(programDataPath))
@@ -64,6 +70,7 @@ namespace Emby.ServerUpdater
                 localVersion = new Version(FileVersionInfo.GetVersionInfo(programDataPath + "\\system\\MediaBrowser.ServerApplication.exe").ProductVersion);
             }
         }
+
         private void getUpdateLevel()
         {
                 XmlDocument xmlDoc = new XmlDocument();
@@ -78,6 +85,7 @@ namespace Emby.ServerUpdater
                     updateLevel = "master";
                 }
         }
+
         public bool downloadPackage()
         {
             if (localVersion < highestVersion)
@@ -86,7 +94,7 @@ namespace Emby.ServerUpdater
                 {
                     Console.WriteLine("Downloading Package");
                     Directory.CreateDirectory(programDataPath + "\\Updates\\");
-                    WebClient wClient = new WebClient();
+                    wClient = new WebClient();
                     wClient.Headers.Add("user-agent", "Emby / 3.0");
                     wClient.DownloadFile(sourceUrl, programDataPath + "\\Updates\\" + targetFilename);
                     File.WriteAllText(programDataPath + "\\Updates\\" + targetFilename + ".ver", highestVersion.ToString());
@@ -100,8 +108,10 @@ namespace Emby.ServerUpdater
             }
             return false;
         }
+
         public void stopService()
         {
+            embyService = new ServiceController(embyServiceName);
             if (embyService != null && embyService.Status.Equals(ServiceControllerStatus.Running) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
                 Console.WriteLine("Stopping Service");
@@ -110,17 +120,27 @@ namespace Emby.ServerUpdater
                 {
                     Console.WriteLine("Waiting for process to close");
                     continue;
-                } 
+                }
             }
         }
+
         public void startService()
         {
+            embyService = new ServiceController(embyServiceName);
             if (embyService != null && embyService.Status.Equals(ServiceControllerStatus.Stopped) && Process.GetProcessesByName("ffmpeg").Length == 0)
             {
-                Console.WriteLine("Starting Service");
-                embyService.Start();
+                try
+                {
+                    Console.WriteLine("Starting Service");
+                    embyService.Start();
+                }
+                catch
+                {
+                    Console.WriteLine("Updating Emby");
+                }
             }
         }
+
         public void restartService() {
             stopService();
             startService();
@@ -137,25 +157,24 @@ namespace Emby.ServerUpdater
                     File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Emby.ServerUpdater.exe", programDataPath + "\\Updater" + "\\Emby.ServerUpdater.exe", true);
                     File.Copy(AppDomain.CurrentDomain.BaseDirectory + "\\Newtonsoft.Json.dll", programDataPath + "\\Updater" + "\\Newtonsoft.Json.dll", true);
                 }
-                Process cmd = new Process();
+                cmd = new Process();
                 cmd.StartInfo.FileName = "c:\\windows\\system32\\schtasks.exe";
                 cmd.StartInfo.Arguments = "/create /sc DAILY /TN \"Emby Service Updater\" /RU SYSTEM /TR " + programDataPath + "\\Updater" + "\\Emby.ServerUpdater.exe" + " /ST 04:00 /F";
                 cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                 cmd.Start();  
             }
         }
+
         public void serviceToAuto()
         {
-            if (embyService != null)
-            {
-                Console.WriteLine("Emby Auto Startup");
-                Process cmd = new Process();
-                cmd.StartInfo.FileName = "c:\\windows\\system32\\sc.exe";
-                cmd.StartInfo.Arguments = "config Emby start=auto";
-                cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                cmd.Start();
-            }
+            Console.WriteLine("Emby Auto Startup");
+            cmd = new Process();
+            cmd.StartInfo.FileName = "c:\\windows\\system32\\sc.exe";
+            cmd.StartInfo.Arguments = "config " + embyServiceName + " start=auto";
+            cmd.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            cmd.Start();
         }
+
         static void Main(string[] args)
         {
             Program program = new Program();
