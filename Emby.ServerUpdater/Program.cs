@@ -13,7 +13,7 @@ namespace Emby.ServerUpdater
     class Program
     {
         private Version localVersion;
-        private Version highestVersion = new Version();
+        private Version highestVersion;
         private string sourceUrl;
         private string targetFilename = "Mbserver.zip";
         private string sourceFilename = "emby.windows.zip";
@@ -34,6 +34,7 @@ namespace Emby.ServerUpdater
 
         private void getRemoteVersion()
         {
+            highestVersion = new Version();
             wClient = new WebClient();
             wClient.Headers.Add("user-agent", "Emby / 3.0");
             string json = wClient.DownloadString("https://api.github.com/repos/mediabrowser/emby/releases");
@@ -41,7 +42,7 @@ namespace Emby.ServerUpdater
             foreach (dynamic package in packages)
             {
                 Version version = new Version(package.tag_name.ToString());
-                if (package.target_commitish == updateLevel && version >= highestVersion)
+                if ((package.name.ToString().EndsWith(updateLevel, StringComparison.OrdinalIgnoreCase) || (!(bool)package.prerelease && updateLevel == "Release")) && version >= highestVersion)
                 {
                     foreach (dynamic asset in package.assets)
                     {
@@ -53,6 +54,8 @@ namespace Emby.ServerUpdater
                     }   
                 }
             }
+            Console.WriteLine(string.Format("sourceUrl is {0}", sourceUrl));
+            Console.WriteLine(string.Format("highestVersion is {0}", highestVersion));
         }
 
         private void getServerProgramDataPath()
@@ -60,6 +63,7 @@ namespace Emby.ServerUpdater
             if (Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null) != null)
             {
                 programDataPath = Path.GetDirectoryName(Path.GetDirectoryName((Registry.GetValue("HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\services\\Emby", "ImagePath", null).ToString()).Replace("\"", "").Split(null).First()));
+                Console.WriteLine(string.Format("programDataPath is {0}", programDataPath));
             }
         }
 
@@ -68,6 +72,7 @@ namespace Emby.ServerUpdater
             if (Directory.Exists(programDataPath))
             {
                 localVersion = new Version(FileVersionInfo.GetVersionInfo(programDataPath + "\\system\\MediaBrowser.ServerApplication.exe").ProductVersion);
+                Console.WriteLine(string.Format("localVersion is {0}", localVersion));
             }
         }
 
@@ -76,13 +81,20 @@ namespace Emby.ServerUpdater
                 XmlDocument xmlDoc = new XmlDocument();
                 xmlDoc.Load(programDataPath + "\\config\\System.xml");
                 XmlNodeList XML = xmlDoc.GetElementsByTagName("SystemUpdateLevel");
-                if (XML[0].InnerText != "Release")
+                if (XML[0].InnerText == "Release")
                 {
-                    updateLevel = XML[0].InnerText.ToLower();
+                    updateLevel = "Release";
+                    Console.WriteLine(string.Format("updateLevel is {0}", updateLevel));
                 }
-                else
+                else if (XML[0].InnerText == "Beta")
                 {
-                    updateLevel = "master";
+                    updateLevel = "-beta";
+                    Console.WriteLine(string.Format("updateLevel is {0}", updateLevel));
+                }
+                else if (XML[0].InnerText == "Dev")
+                {
+                    updateLevel = "-dev";
+                    Console.WriteLine(string.Format("updateLevel is {0}", updateLevel));
                 }
         }
 
