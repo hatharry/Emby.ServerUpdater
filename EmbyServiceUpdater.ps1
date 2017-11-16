@@ -1,6 +1,7 @@
 ﻿param([switch]$InstallTask, [switch]$UninstallTask)
 #requires –runasadministrator
 
+Install-PackageProvider -Name NuGet -Force
 Install-Module -Name 7Zip4Powershell -Force
 Import-Module -name 7Zip4Powershell
 
@@ -14,14 +15,19 @@ Class EmbyServiceUpdater
     $remoteVersion = [version]
     $assetUrl = [string]
     $isCore = [bool]
+    $serviceName = [string]
 
     getlocation() {
+        $this.serviceName = (Get-Service | Where-Object {$_.name -match "emby"}).name
+        if ($this.serviceName.Length -eq 0){
+            throw "can not find emby service"
+        }
         try{
-            $appLocation = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Emby\Parameters").Application
+            $appLocation = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$($this.serviceName)\Parameters").Application
             $this.location = (Get-Item $appLocation).Directory.Parent.FullName
             $this.isCore = $true
         } catch {
-            $appLocation = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Emby").ImagePath.split("`"")[1]
+            $appLocation = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$($this.serviceName)").ImagePath.split("`"")[1]
             $this.location = (Get-Item $appLocation).Directory.Parent.FullName
             $this.isCore = $false
         }
@@ -29,18 +35,15 @@ Class EmbyServiceUpdater
 
     getLatestRelease() {
         $releases = ConvertFrom-Json (Invoke-WebRequest "https://api.github.com/repos/mediabrowser/emby/releases" -UseBasicParsing)
-        if ($this.localVersion.Revision -eq 0) {
-            $this.release = ($releases | Where-Object {$_.prerelease -eq $false})[0]
-        } else {
-            $this.release = ($releases | Where-Object {$_.name -match "beta"})[0]
-        }
+        $preRelease = $this.localVersion.Revision -ne 0
+        $this.release = ($releases | Where-Object {$_.prerelease -eq $preRelease})[0] 
     }
 
     getLocalVersion() {
-        try {
-            $this.localVersion = (Get-Item "$($this.location)\system\EmbyServer.dll").VersionInfo.FileVersion
-        } catch {
-            $this.localVersion = (Get-Item "$($this.location)\system\MediaBrowser.ServerApplication.exe").VersionInfo.FileVersion
+        if ($this.isCore) {
+            $this.localVersion = [Version](Get-Item "$($this.location)\system\EmbyServer.dll").VersionInfo.FileVersion
+        } else {
+            $this.localVersion = [Version](Get-Item "$($this.location)\system\MediaBrowser.ServerApplication.exe").VersionInfo.FileVersion
         }
     }
 
@@ -57,26 +60,28 @@ Class EmbyServiceUpdater
     }
 
     getUpdate() {
-        if (Test-Path $this.location) {
-            try {
-                if ([version]$this.release.tag_name -gt $this.localVersion) {
-                    if (-not (test-path "$($this.location)\updates")) { 
-                        (mkdir "$($this.location)\updates")
-                    }
-                    Invoke-WebRequest $this.assetUrl -OutFile "$($this.location)\updates\MBserver.zip" -UseBasicParsing
-                    $this.release.tag_name > "$($this.location)\updates\MBserver.zip.ver"
+        try {
+            if ($this.release.tag_name -gt $this.localVersion) {
+                if (-not (test-path "$($this.location)\updates")) { 
+                    (mkdir "$($this.location)\updates")
                 }
-            } catch {
-                if (Test-Path "$($this.location)\updates") {
-                    (Remove-Item "$($this.location)\updates" -Recurse)
-                }
+                Invoke-WebRequest $this.assetUrl -OutFile "$($this.location)\updates\MBserver.zip" -UseBasicParsing
+                $this.release.tag_name > "$($this.location)\updates\MBserver.zip.ver"
+            } else {
+                Write-Progress "emby is up to date $($this.localVersion)"
+                Start-Sleep 1
+            }
+       } catch {
+            if (Test-Path "$($this.location)\updates") {
+                (Remove-Item "$($this.location)\updates" -Recurse)
             }
         }
+        
     }
 
     install() {
         if (Test-Path "$($this.location)\Updates\MBserver.zip") {
-            Stop-Service Emby
+            Stop-Service $($this.serviceName)
             Wait-Process embyserver -ErrorAction SilentlyContinue
             Wait-Process MediaBrowser.ServerApplication -ErrorAction SilentlyContinue
             if (Test-Path "$($this.location)\System.old") {
@@ -86,13 +91,21 @@ Class EmbyServiceUpdater
                 Move-Item "$($this.location)\System" "$($this.location)\System.old"
             }
             if (-not (Test-Path "$($this.location)\System")) {
-                
-                Expand-7Zip "$($this.location)\Updates\MBserver.zip" "$($this.location)"
+                try {
+                    Expand-7Zip "$($this.location)\Updates\MBserver.zip" "$($this.location)"
+                } catch {
+                    if (Test-Path "$($this.location)\System") {
+                        Remove-Item "$($this.location)\System" -Recurse
+                    }
+                    if (Test-Path "$($this.location)\System.old") {
+                        Move-Item "$($this.location)\System.old" "$($this.location)\System"
+                    }
+                }
             }
             if (Test-Path "$($this.location)\System") {
                 Remove-Item "$($this.location)\updates" -Recurse
             }
-            Start-Service Emby
+            Start-Service $($this.serviceName)
         }
     }
 
@@ -102,15 +115,15 @@ Class EmbyServiceUpdater
         if (-not (Test-Path "$($this.location)\updater")) {
             mkdir "$($this.location)\updater"
         }
-        Copy-Item "$PSScriptRoot\$scriptName" "$($this.location)\updater\WindowsServiceUpdater.ps1" -Force
+        Copy-Item "$PSScriptRoot\$scriptName" "$($this.location)\updater\EmbyServiceUpdater.ps1" -Force
         if (Get-Command New-ScheduledTaskAction -ErrorAction SilentlyContinue) {
             $action = New-ScheduledTaskAction -Execute "Powershell.exe" `
-            -Argument "-ExecutionPolicy Bypass -file `"$($this.location)\updater\WindowsServiceUpdater.ps1`""
+            -Argument "-ExecutionPolicy Bypass -file `"$($this.location)\updater\EmbyServiceUpdater.ps1`""
             $trigger =  New-ScheduledTaskTrigger -Daily -At 4am
             Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "Emby Service Updater" -Description "Emby Service Updater" -User "SYSTEM" -Force
         } else {
             start-Process "schtasks.exe" -ArgumentList "/create", "/sc DAILY", "/TN `"Emby Service Updater`"",
-            "/RU SYSTEM", "/TR" ,"Powershell.exe", "-ExecutionPolicy Bypass -file `"$($this.location)\updater\WindowsServiceUpdater.ps1`"",
+            "/RU SYSTEM", "/TR" ,"Powershell.exe", "-ExecutionPolicy Bypass -file `"$($this.location)\updater\EmbyServiceUpdater.ps1`"",
             "/ST 04:00", "/F" -Wait
         }
     }
@@ -139,6 +152,7 @@ if ($InstallTask) {
 } else {
     $Updater.getLocalVersion()
     $Updater.getLatestRelease()
+    $Updater.getAssetUrl()
     $Updater.getUpdate()
     $Updater.install()
 }
