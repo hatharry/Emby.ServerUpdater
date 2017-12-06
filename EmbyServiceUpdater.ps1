@@ -50,9 +50,9 @@ Class EmbyServiceUpdater
     getAssetUrl() {
         if ($this.isCore) {
             if([Environment]::Is64BitOperatingSystem){
-                $this.assetUrl = ($this.release.assets | Where-Object {$_.name -match "embyserver-win-x64"}).browser_download_url
+                $this.assetUrl = ($this.release.assets | Where-Object {$_.name -match "embyserver-windows-x64"}).browser_download_url
             } else {
-                $this.assetUrl = ($this.release.assets | Where-Object {$_.name -match "embyserver-win-x86"}).browser_download_url
+                $this.assetUrl = ($this.release.assets | Where-Object {$_.name -match "embyserver-windows-x86"}).browser_download_url
             }
         } else {
             $this.assetUrl = ($this.release.assets | Where-Object {$_.name -match "emby.windows.zip"}).browser_download_url
