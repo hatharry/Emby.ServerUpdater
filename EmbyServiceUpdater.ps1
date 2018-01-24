@@ -18,7 +18,7 @@ Class EmbyServiceUpdater
     $serviceName = [string]
 
     getlocation() {
-        $this.serviceName = (Get-Service | Where-Object {$_.name -match "emby"})[0].name
+        $this.serviceName = (Get-Service | Where-Object {$_.name -match "emby"} | Select-Object -first 1).name
         if ($this.serviceName.Length -eq 0){
             throw "can not find emby service"
         }
