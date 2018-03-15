@@ -1,13 +1,12 @@
 ﻿param([switch]$InstallTask, [switch]$UninstallTask)
 #requires –runasadministrator
-
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Install-PackageProvider -Name NuGet -Force
 Install-Module -Name 7Zip4Powershell -Force
 Import-Module -name 7Zip4Powershell
 
 Class EmbyServiceUpdater {
 
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $location = [string]
     $releaseChannel = [string]
     $release = [object]
