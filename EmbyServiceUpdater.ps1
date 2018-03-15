@@ -1,4 +1,4 @@
-﻿param([switch]$InstallTask, [switch]$UninstallTask)
+﻿param([switch]$InstallTask, [switch]$UninstallTask, [switch]$UpdateScript)
 #requires –runasadministrator
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Install-PackageProvider -Name NuGet -Force
@@ -139,6 +139,18 @@ Class EmbyServiceUpdater {
             Remove-Item "$($this.location)\updater" -Recurse
         }
     }
+    
+    updateScript() {
+        $git = Invoke-WebRequest https://raw.githubusercontent.com/hatharry/Emby.ServerUpdater/master/EmbyServiceUpdater.ps1 -UseBasicParsing
+        $gitStr = [string]$git.Content
+        $file = Get-Content "$($this.location)\updater\EmbyServiceUpdater.ps1" -Raw
+        $fileStr = [string]$file
+        if ($fileStr.GetHashCode() -ne $gitStr.GetHashCode()) {
+            Write-Progress "Script Updated"
+            Start-Sleep 1
+            $gitStr | Out-File "$($this.location)\updater\EmbyServiceUpdater.ps1" -NoNewline
+        }
+    }
 }
 
 
@@ -148,6 +160,8 @@ if ($InstallTask) {
     $Updater.installTask($MyInvocation.MyCommand.Name)
 } elseif ($UninstallTask) {
     $Updater.uninstallTask()
+} elseif ($UpdateScript) {
+    $Updater.updateScript()
 } else {
     $Updater.getLocalVersion()
     $Updater.getLatestRelease()
