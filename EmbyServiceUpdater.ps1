@@ -1,4 +1,4 @@
-﻿param([switch]$InstallTask, [switch]$UninstallTask, [switch]$UpdateScript)
+param([switch]$InstallTask, [switch]$UninstallTask, [switch]$UpdateScript)
 #requires –runasadministrator
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Install-PackageProvider -Name NuGet -Force
