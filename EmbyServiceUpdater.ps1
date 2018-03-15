@@ -148,7 +148,7 @@ Class EmbyServiceUpdater {
         if ($fileStr.GetHashCode() -ne $gitStr.GetHashCode()) {
             Write-Progress "Script Updated"
             Start-Sleep 1
-            $gitStr | Out-File "$($this.location)\updater\EmbyServiceUpdater.ps1" -NoNewline
+            $gitStr | Set-Content "$($this.location)\updater\EmbyServiceUpdater.ps1" -NoNewline
         }
     }
 }
