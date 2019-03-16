@@ -1,5 +1,5 @@
 param([switch]$InstallTask, [switch]$UninstallTask, [switch]$UpdateScript)
-#requires –runasadministrator
+#requires -runasadministrator
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Install-PackageProvider -Name NuGet -Force
 Install-Module -Name 7Zip4Powershell -Force
