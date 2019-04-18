@@ -33,7 +33,7 @@ Class EmbyServiceUpdater {
 
     getLatestRelease() {
         $releases = ConvertFrom-Json (Invoke-WebRequest "https://api.github.com/repos/mediabrowser/Emby.Releases/releases" -UseBasicParsing)
-        $preRelease = $this.localVersion.Revision -ne 0
+        $preRelease = $false
         $this.release = ($releases | Where-Object {$_.prerelease -eq $preRelease} | Select-Object -first 1) 
     }
 
