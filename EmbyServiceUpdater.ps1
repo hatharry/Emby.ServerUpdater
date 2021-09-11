@@ -36,7 +36,7 @@ Class EmbyServiceUpdater {
     }
 
     GetLocation() {
-        $this.location = (Get-Item (Get-Process embyserver).Path).Directory.Parent.FullName
+        $this.location = (Get-Item (Get-Process embyserver | Select-Object -first 1).Path).Directory.Parent.FullName
     }
 
     GetAssetUrl() {
